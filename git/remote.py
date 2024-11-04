@@ -256,7 +256,7 @@ class PushInfo(IterableObj):
             # but we parse the old and new commit.
             split_token = "..."
             if control_character == " ":
-                split_token = ".."
+                split_token = split_token[:-1]
             old_sha, _new_sha = summary.split(" ")[0].split(split_token)
             # Have to use constructor here as the sha usually is abbreviated.
             old_commit = old_sha
@@ -510,7 +510,7 @@ class FetchInfo(IterableObj):
 
         note = (note and note.strip()) or ""
 
-        return cls(remote_local_ref, flags, note, old_commit, local_remote_ref)
+        return cls(remote_local_ref, flags, note, old_commit, remote_local_ref_str)
 
     @classmethod
     def iter_items(cls, repo: "Repo", *args: Any, **kwargs: Any) -> NoReturn:  # -> Iterator['FetchInfo']:

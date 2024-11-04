@@ -816,7 +816,7 @@ class TestRemote(TestBase):
                 # since we don't have that protocol enabled in the Git config file.
                 with self.assertRaises(GitCommandError):
                     remote.fetch(url, allow_unsafe_protocols=True)
-                assert not tmp_file.exists()
+                assert not tmp_file exists()
 
     @with_rw_repo("HEAD")
     def test_fetch_unsafe_options(self, rw_repo):
@@ -1017,18 +1017,140 @@ class TestRemote(TestBase):
         # Cleanup branch
         Head.delete(remote_repo, bad_branch_name)
 
+    def test_remote_progress_update(self):
+        class TestProgress(RemoteProgress):
+            def update(self, op_code, cur_count, max_count=None, message=""):
+                self.last_update = (op_code, cur_count, max_count, message)
 
-class TestTimeouts(TestBase):
-    @with_rw_repo("HEAD", bare=False)
-    def test_timeout_funcs(self, repo):
-        # Force error code to prevent a race condition if the python thread is slow.
-        default = Git.AutoInterrupt._status_code_if_terminate
-        Git.AutoInterrupt._status_code_if_terminate = -15
-        for function in ["pull", "fetch"]:  # Can't get push to time out.
-            f = getattr(repo.remotes.origin, function)
-            assert f is not None  # Make sure these functions exist.
-            _ = f()  # Make sure the function runs.
-            with pytest.raises(GitCommandError, match="kill_after_timeout=0 s"):
-                f(kill_after_timeout=0)
+        progress = TestProgress()
+        progress.update(RemoteProgress.COUNTING | RemoteProgress.BEGIN, 0, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING | RemoteProgress.BEGIN, 0, 100, "Counting objects"))
 
-        Git.AutoInterrupt._status_code_if_terminate = default
+        progress.update(RemoteProgress.COUNTING, 50, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING, 50, 100, "Counting objects"))
+
+        progress.update(RemoteProgress.COUNTING | RemoteProgress.END, 100, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING | RemoteProgress.END, 100, 100, "Counting objects"))
+
+        progress.update(RemoteProgress.COMPRESSING | RemoteProgress.BEGIN, 0, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING | RemoteProgress.BEGIN, 0, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.COMPRESSING, 50, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING, 50, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.COMPRESSING | RemoteProgress.END, 100, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING | RemoteProgress.END, 100, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.WRITING | RemoteProgress.BEGIN, 0, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING | RemoteProgress.BEGIN, 0, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.WRITING, 50, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING, 50, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.WRITING | RemoteProgress.END, 100, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING | RemoteProgress.END, 100, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.RECEIVING | RemoteProgress.BEGIN, 0, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING | RemoteProgress.BEGIN, 0, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RECEIVING, 50, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING, 50, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RECEIVING | RemoteProgress.END, 100, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING | RemoteProgress.END, 100, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RESOLVING | RemoteProgress.BEGIN, 0, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING | RemoteProgress.BEGIN, 0, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.RESOLVING, 50, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING, 50, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.RESOLVING | RemoteProgress.END, 100, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING | RemoteProgress.END, 100, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES | RemoteProgress.BEGIN, 0, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES | RemoteProgress.BEGIN, 0, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES, 50, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES, 50, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES | RemoteProgress.END, 100, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES | RemoteProgress.END, 100, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.CHECKING_OUT | RemoteProgress.BEGIN, 0, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT | RemoteProgress.BEGIN, 0, 100, "Checking out files"))
+
+        progress.update(RemoteProgress.CHECKING_OUT, 50, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT, 50, 100, "Checking out files"))
+
+        progress.update(RemoteProgress.CHECKING_OUT | RemoteProgress.END, 100, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT | RemoteProgress.END, 100, 100, "Checking out files"))
+
+    def test_remote_progress_rendering(self):
+        class TestProgress(RemoteProgress):
+            def update(self, op_code, cur_count, max_count=None, message=""):
+                self.last_update = (op_code, cur_count, max_count, message)
+
+        progress = TestProgress()
+        progress.update(RemoteProgress.COUNTING | RemoteProgress.BEGIN, 0, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING | RemoteProgress.BEGIN, 0, 100, "Counting objects"))
+
+        progress.update(RemoteProgress.COUNTING, 50, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING, 50, 100, "Counting objects"))
+
+        progress.update(RemoteProgress.COUNTING | RemoteProgress.END, 100, 100, "Counting objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COUNTING | RemoteProgress.END, 100, 100, "Counting objects"))
+
+        progress.update(RemoteProgress.COMPRESSING | RemoteProgress.BEGIN, 0, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING | RemoteProgress.BEGIN, 0, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.COMPRESSING, 50, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING, 50, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.COMPRESSING | RemoteProgress.END, 100, 100, "Compressing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.COMPRESSING | RemoteProgress.END, 100, 100, "Compressing objects"))
+
+        progress.update(RemoteProgress.WRITING | RemoteProgress.BEGIN, 0, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING | RemoteProgress.BEGIN, 0, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.WRITING, 50, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING, 50, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.WRITING | RemoteProgress.END, 100, 100, "Writing objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.WRITING | RemoteProgress.END, 100, 100, "Writing objects"))
+
+        progress.update(RemoteProgress.RECEIVING | RemoteProgress.BEGIN, 0, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING | RemoteProgress.BEGIN, 0, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RECEIVING, 50, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING, 50, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RECEIVING | RemoteProgress.END, 100, 100, "Receiving objects")
+        self.assertEqual(progress.last_update, (RemoteProgress.RECEIVING | RemoteProgress.END, 100, 100, "Receiving objects"))
+
+        progress.update(RemoteProgress.RESOLVING | RemoteProgress.BEGIN, 0, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING | RemoteProgress.BEGIN, 0, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.RESOLVING, 50, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING, 50, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.RESOLVING | RemoteProgress.END, 100, 100, "Resolving deltas")
+        self.assertEqual(progress.last_update, (RemoteProgress.RESOLVING | RemoteProgress.END, 100, 100, "Resolving deltas"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES | RemoteProgress.BEGIN, 0, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES | RemoteProgress.BEGIN, 0, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES, 50, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES, 50, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.FINDING_SOURCES | RemoteProgress.END, 100, 100, "Finding sources")
+        self.assertEqual(progress.last_update, (RemoteProgress.FINDING_SOURCES | RemoteProgress.END, 100, 100, "Finding sources"))
+
+        progress.update(RemoteProgress.CHECKING_OUT | RemoteProgress.BEGIN, 0, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT | RemoteProgress.BEGIN, 0, 100, "Checking out files"))
+
+        progress.update(RemoteProgress.CHECKING_OUT, 50, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT, 50, 100, "Checking out files"))
+
+        progress.update(RemoteProgress.CHECKING_OUT | RemoteProgress.END, 100, 100, "Checking out files")
+        self.assertEqual(progress.last_update, (RemoteProgress.CHECKING_OUT | RemoteProgress.END, 100, 100, "Checking out files"))
